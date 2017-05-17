@@ -1,6 +1,7 @@
 import tkinter as tk
 import tkinter.filedialog
 import os
+from hashlib import md5
 
 class Editor:
     def __init__(self, master):
@@ -9,17 +10,17 @@ class Editor:
         self.frame.pack()
         self.filetypes = (("Normal text file", "*.txt"), ("all files", "*.*"))
         self.file_dir = ''
+        self.init_dir = os.path.join(os.path.expanduser('~'), 'Desktop')
         
         # Create Menu Bar
         menubar = tk.Menu(self.master)
         
         # Create File Menu
         filemenu = tk.Menu(menubar, tearoff=0)
-        filemenu.add_command(label="New")
+        filemenu.add_command(label="New", command=self.new)
         filemenu.add_command(label="Open", command=self.open_file)
         filemenu.add_command(label="Save", command=self.save_file)
         filemenu.add_command(label="Save as...", command=self.save_as)
-        filemenu.add_command(label="Close", command=self.close)
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.exit)
         
@@ -51,6 +52,9 @@ class Editor:
         textbox.config(xscrollcommand=xscrollbar.set, yscrollcommand=yscrollbar.set)
         textbox.pack(fill='both')
         
+        # Get md5 hash of the initial state for comparison (to check for changes). 
+        self.status = md5(textbox.get(1.0, 'end').encode('utf-8'))
+        
         xscrollbar.config(command=textbox.xview)
         yscrollbar.config(command=textbox.yview)
 
@@ -58,20 +62,30 @@ class Editor:
         # Open a window to browse to the file you would like to open, returns the directory.
         self.file_dir = (tkinter
          .filedialog
-         .askopenfilename(initialdir='/', title="Select file", filetypes=self.filetypes))
+         .askopenfilename(initialdir=self.init_dir, title="Select file", filetypes=self.filetypes))
         
-        with open(self.file_dir, 'r') as f:
-            # Clears the text widget.
-            self.textbox.delete(1.0, 'end')
+        # If directory is not the empty string, try to open the file. 
+        if self.file_dir:
+            try: 
+                # Open the file.
+                file = open(self.file_dir)
             
-            # Puts the contents of the file into the text widget.
-            self.textbox.insert('end', f.read())
+                # Clears the text widget.
+                self.textbox.delete(1.0, 'end')
+                
+                # Puts the contents of the file into the text widget.
+                self.textbox.insert('end', file.read())
+                
+                # Update hash
+                self.status = md5(textbox.get(1.0, 'end').encode('utf-8'))
+            except:
+                return
                 
     def save_as(self):
         # Gets file directory and name of file to save.
         self.file_dir = (tkinter
          .filedialog
-         .asksaveasfilename(initialdir = '/', title = "Select file", filetypes = self.filetypes))
+         .asksaveasfilename(initialdir=self.init_dir, title="Select file", filetypes=self.filetypes))
          
         # Adds .txt suffix if not already included.
         if self.file_dir[len(self.file_dir)-5:] != '.txt':
@@ -81,6 +95,9 @@ class Editor:
         file = open(self.file_dir, 'w')
         file.write(self.textbox.get(1.0, 'end'))
         file.close()
+        
+        # Update hash
+        self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
         
     def save_file(self):
         # If file directory is empty, use save_as to get save information from user. 
@@ -92,17 +109,23 @@ class Editor:
             with open(self.file_dir, 'w') as file:
                 file.write(self.textbox.get(1.0, 'end'))
                 
-    def close(self):
-        # Saves file, resets directory, and clears text widget.
-        self.save_file()
+            # Update hash
+            self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
+                
+    def new(self):
+        # Saves file if there are changes, resets directory, and clears text widget.
+        if md5(self.textbox.get(1.0, 'end').encode('utf-8')).digest() != self.status.digest():
+            self.save_file()
         self.file_dir = ''
         self.textbox.delete(1.0, 'end')
+        
+        # Update hash
+        self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
         
     def exit(self):        
         # Destroy the editor window.
         self.master.destroy()
         
-
 def main(): 
     root = tk.Tk()
     app = Editor(root)
