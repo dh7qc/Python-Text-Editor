@@ -86,6 +86,10 @@ class Editor:
         self.file_dir = (tkinter
          .filedialog
          .asksaveasfilename(initialdir=self.init_dir, title="Select file", filetypes=self.filetypes))
+        
+        # Return if directory is still empty (user closes window without specifying file name).
+        if not self.file_dir:
+            return
          
         # Adds .txt suffix if not already included.
         if self.file_dir[len(self.file_dir)-5:] != '.txt':
