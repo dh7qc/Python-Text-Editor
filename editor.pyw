@@ -28,11 +28,11 @@ class Editor:
         editmenu = tk.Menu(menubar, tearoff=0)
         editmenu.add_command(label="Undo")
         editmenu.add_separator()
-        editmenu.add_command(label="Cut")
-        editmenu.add_command(label="Copy")
-        editmenu.add_command(label="Paste")
-        editmenu.add_command(label="Delete")
-        editmenu.add_command(label="Select All")
+        editmenu.add_command(label="Cut", command=self.cut)
+        editmenu.add_command(label="Copy", command=self.copy)
+        editmenu.add_command(label="Paste", command=self.paste)
+        editmenu.add_command(label="Delete", command=self.delete)
+        editmenu.add_command(label="Select All", command=self.select_all)
         
         # Attach to Menu Bar
         menubar.add_cascade(label="File", menu=filemenu)
@@ -106,7 +106,7 @@ class Editor:
     def save_file(self):
         # If file directory is empty, use save_as to get save information from user. 
         if not self.file_dir:
-           self.save_as()
+            self.save_as()
 
         # Otherwise save file to directory, overwriting existing file or creating a new one.
         else:
@@ -125,6 +125,41 @@ class Editor:
         
         # Update hash
         self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
+        
+    def copy(self):
+        # Clears the clipboard, copies selected contents.
+        try: 
+            sel = self.textbox.get(tk.SEL_FIRST, tk.SEL_LAST)
+            self.master.clipboard_clear()
+            self.master.clipboard_append(sel)
+        # If no text is selected.
+        except tk.TclError:
+            pass
+            
+    def delete(self):
+        # Delete teh selected text.
+        try:
+            self.textbox.delete(tk.SEL_FIRST, tk.SEL_LAST)
+        # If no text is selected.
+        except tk.TclError:
+            pass
+            
+    def cut(self):
+        # Copies selection to the clipboard, then deletes selection.
+        try: 
+            sel = self.textbox.get(tk.SEL_FIRST, tk.SEL_LAST)
+            self.master.clipboard_clear()
+            self.master.clipboard_append(sel)
+            self.textbox.delete(tk.SEL_FIRST, tk.SEL_LAST)
+        # If no text is selected.
+        except tk.TclError:
+            pass
+            
+    def paste(self):
+        self.textbox.insert(tk.INSERT, self.master.clipboard_get())
+            
+    def select_all(self):
+        pass
         
     def exit(self):        
         # Destroy the editor window.
