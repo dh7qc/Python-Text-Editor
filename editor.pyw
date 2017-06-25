@@ -56,12 +56,13 @@ class Editor:
         
         # Create Text Editor Box
         textbox = self.textbox = tk.Text(self.master, relief='sunken', borderwidth=0, wrap='none')
-        textbox.config(xscrollcommand=xscrollbar.set, yscrollcommand=yscrollbar.set)
+        textbox.config(xscrollcommand=xscrollbar.set, yscrollcommand=yscrollbar.set, undo=True, autoseparators=True)
         
         # Keyboard / Click Bindings
         textbox.bind('<Control-s>', self.save_file)
         textbox.bind('<Control-o>', self.open_file)
         textbox.bind('<Control-n>', self.new_file)
+        textbox.bind('<Control-a>', self.select_all)
         textbox.bind('<Button-3>', self.right_click)
            
         # Pack the textbox
@@ -69,10 +70,14 @@ class Editor:
         
         # Create right-click menu.
         self.right_click_menu = tk.Menu(self.master, tearoff=0)
+        self.right_click_menu.add_command(label="Undo", command=self.undo)
+        self.right_click_menu.add_separator()
         self.right_click_menu.add_command(label="Cut", command=self.cut)
         self.right_click_menu.add_command(label="Copy", command=self.copy)
         self.right_click_menu.add_command(label="Paste", command=self.paste)
         self.right_click_menu.add_command(label="Delete", command=self.delete)
+        self.right_click_menu.add_separator()
+        self.right_click_menu.add_command(label="Select All", command=self.select_all)
        
         # Get md5 hash of the initial state for comparison (to check for changes). 
         self.status = md5(textbox.get(1.0, 'end').encode('utf-8'))
@@ -186,11 +191,16 @@ class Editor:
     def paste(self):
         self.textbox.insert(tk.INSERT, self.master.clipboard_get())
             
-    def select_all(self):
-        pass
+    def select_all(self, *args):
+        # Selects / highlights all the text.
+        self.textbox.tag_add(tk.SEL, "1.0", tk.END)
+        
+        # Set mark position to the end and scroll to the end of selection.
+        self.textbox.mark_set(tk.INSERT, tk.END)
+        self.textbox.see(tk.INSERT)
         
     def undo(self):
-        pass
+        self.textbox.edit_undo()
         
     def right_click(self, event):
         self.right_click_menu.post(event.x_root, event.y_root)
