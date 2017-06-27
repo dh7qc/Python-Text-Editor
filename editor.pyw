@@ -1,5 +1,6 @@
 import tkinter as tk
 import tkinter.filedialog
+from tkinter import messagebox
 import os
 from hashlib import md5
 
@@ -12,6 +13,9 @@ class Editor:
         self.filetypes = (("Normal text file", "*.txt"), ("all files", "*.*"))
         self.file_dir = ''
         self.init_dir = os.path.join(os.path.expanduser('~'), 'Desktop')
+        
+        # Override the X button.
+        self.master.protocol('WM_DELETE_WINDOW', self.exit)
         
         # Create Menu Bar
         menubar = tk.Menu(self.master)
@@ -66,7 +70,7 @@ class Editor:
         textbox.bind('<Button-3>', self.right_click)
            
         # Pack the textbox
-        textbox.pack(fill='both')
+        textbox.pack(fill='both', expand=True)
         
         # Create right-click menu.
         self.right_click_menu = tk.Menu(self.master, tearoff=0)
@@ -86,6 +90,10 @@ class Editor:
         yscrollbar.config(command=textbox.yview)
 
     def open_file(self, *args):
+        # Prompt user to save file if there were changes, return if they cancel.
+        if not self.save_changes():
+            return
+        
         # Open a window to browse to the file you would like to open, returns the directory.
         self.file_dir = (tkinter
          .filedialog
@@ -112,7 +120,7 @@ class Editor:
         # Gets file directory and name of file to save.
         self.file_dir = (tkinter
          .filedialog
-         .asksaveasfilename(initialdir=self.init_dir, title="Select file", filetypes=self.filetypes))
+         .asksaveasfilename(initialdir=self.init_dir, title="Select file", filetypes=self.filetypes, defaultextension='.txt'))
         
         # Return if directory is still empty (user closes window without specifying file name).
         if not self.file_dir:
@@ -131,7 +139,7 @@ class Editor:
         self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
         
     def save_file(self, *args):
-        # If file directory is empty, use save_as to get save information from user. 
+        # If file directory is empty or Untitled, use save_as to get save information from user. 
         if not self.file_dir:
             self.save_as()
 
@@ -145,8 +153,10 @@ class Editor:
                 
     def new_file(self, *args):
         # Saves file if there are changes, resets directory, and clears text widget.
-        if md5(self.textbox.get(1.0, 'end').encode('utf-8')).digest() != self.status.digest():
-            self.save_file()
+        # Prompt user to save file if there were changes, return if they cancel.
+        if not self.save_changes():
+            return
+        
         self.file_dir = ''
         self.textbox.delete(1.0, 'end')
         
@@ -206,9 +216,30 @@ class Editor:
         self.right_click_menu.post(event.x_root, event.y_root)
         
     def exit(self):        
-        # Destroy the editor window.
-        self.master.destroy()
-        
+        # Check if any changes have been made.
+        if self.save_changes():
+            self.master.destroy()
+        else:
+            return
+               
+    def save_changes(self):
+        # Check if any changes have been made, returns False if user chooses to cancel rather than select to save or not.
+        if md5(self.textbox.get(1.0, 'end').encode('utf-8')).digest() != self.status.digest():
+            # If changes were made since last save, ask if user wants to save.
+            m = messagebox.askyesnocancel('Editor', 'Do you want to save changes to ' + ('Untitled' if not self.file_dir else self.file_dir) + '?' )
+            
+            # If None, cancel.
+            if m is None:
+                return False
+            # else if True, save.
+            elif m is True:
+                self.save_file()
+            # else don't save.
+            else:
+                pass
+                
+        return True
+
 def main(): 
     root = tk.Tk()
     app = Editor(root)
