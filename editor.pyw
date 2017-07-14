@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import ttk
 import tkinter.filedialog
 from tkinter import messagebox
 import os
@@ -13,7 +14,10 @@ class Editor:
         self.filetypes = (("Normal text file", "*.txt"), ("all files", "*.*"))
         self.file_dir = ''
         self.init_dir = os.path.join(os.path.expanduser('~'), 'Desktop')
-        
+        self.tabs = {} # { index, text widget }
+        self.nb = ttk.Notebook(master)
+        self.nb.bind("<Button-2>", self.close)
+
         # Override the X button.
         self.master.protocol('WM_DELETE_WINDOW', self.exit)
         
@@ -25,7 +29,8 @@ class Editor:
         filemenu.add_command(label="New", command=self.new_file)
         filemenu.add_command(label="Open", command=self.open_file)
         filemenu.add_command(label="Save", command=self.save_file)
-        filemenu.add_command(label="Save as...", command=self.save_as)
+        filemenu.add_command(label="Save As...", command=self.save_as)
+        filemenu.add_command(label="Close", command=self.close)
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.exit)
         
@@ -49,28 +54,6 @@ class Editor:
         menubar.add_cascade(label="Edit", menu=editmenu)
         menubar.add_cascade(label="Format", menu=formatmenu)
         self.master.config(menu=menubar)
-
-        # Horizontal Scroll Bar 
-        xscrollbar = tk.Scrollbar(self.master, orient='horizontal')
-        xscrollbar.pack(side='bottom', fill='x')
-        
-        # Vertical Scroll Bar
-        yscrollbar = tk.Scrollbar(self.master)
-        yscrollbar.pack(side='right', fill='y')
-        
-        # Create Text Editor Box
-        textbox = self.textbox = tk.Text(self.master, relief='sunken', borderwidth=0, wrap='none')
-        textbox.config(xscrollcommand=xscrollbar.set, yscrollcommand=yscrollbar.set, undo=True, autoseparators=True)
-        
-        # Keyboard / Click Bindings
-        textbox.bind('<Control-s>', self.save_file)
-        textbox.bind('<Control-o>', self.open_file)
-        textbox.bind('<Control-n>', self.new_file)
-        textbox.bind('<Control-a>', self.select_all)
-        textbox.bind('<Button-3>', self.right_click)
-           
-        # Pack the textbox
-        textbox.pack(fill='both', expand=True)
         
         # Create right-click menu.
         self.right_click_menu = tk.Menu(self.master, tearoff=0)
@@ -82,12 +65,43 @@ class Editor:
         self.right_click_menu.add_command(label="Delete", command=self.delete)
         self.right_click_menu.add_separator()
         self.right_click_menu.add_command(label="Select All", command=self.select_all)
-       
+
+        page_1 = ttk.Frame(self.nb)
+        text_1 = self.create_text_window( page_1 )
+        self.nb.add(page_1, text='Untitled')
+        self.tabs[ self.nb.index( page_1 ) ] = text_1
+        self.nb.pack(expand=1, fill="both")
+        
+    def create_text_window(self, frame):
+        # Horizontal Scroll Bar 
+        xscrollbar = tk.Scrollbar(frame, orient='horizontal')
+        xscrollbar.pack(side='bottom', fill='x')
+        
+        # Vertical Scroll Bar
+        yscrollbar = tk.Scrollbar(frame)
+        yscrollbar.pack(side='right', fill='y')
+
+        # Create Text Editor Box
+        textbox = tk.Text(frame, relief='sunken', borderwidth=0, wrap='none')
+        textbox.config(xscrollcommand=xscrollbar.set, yscrollcommand=yscrollbar.set, undo=True, autoseparators=True)
+
+        # Keyboard / Click Bindings
+        textbox.bind('<Control-s>', self.save_file)
+        textbox.bind('<Control-o>', self.open_file)
+        textbox.bind('<Control-n>', self.new_file)
+        textbox.bind('<Control-a>', self.select_all)
+        textbox.bind('<Button-3>', self.right_click)
+
+        # Pack the textbox
+        textbox.pack(fill='both', expand=True)
+
         # Get md5 hash of the initial state for comparison (to check for changes). 
         self.status = md5(textbox.get(1.0, 'end').encode('utf-8'))
         
         xscrollbar.config(command=textbox.xview)
         yscrollbar.config(command=textbox.yview)
+        
+        return textbox
 
     def open_file(self, *args):
         # Prompt user to save file if there were changes, return if they cancel.
@@ -101,21 +115,21 @@ class Editor:
         
         # If directory is not the empty string, try to open the file. 
         if self.file_dir:
-            try: 
+            try:
                 # Open the file.
                 file = open(self.file_dir)
             
                 # Clears the text widget.
-                self.textbox.delete(1.0, 'end')
+                self.tabs[ self.nb.index('current') ].delete(1.0, 'end')
                 
                 # Puts the contents of the file into the text widget.
-                self.textbox.insert('end', file.read())
+                self.tabs[ self.nb.index('current') ].insert('end', file.read())
                 
                 # Update hash
-                self.status = md5(textbox.get(1.0, 'end').encode('utf-8'))
+                self.status = md5(tabs[ self.nb.index('current') ].get(1.0, 'end').encode('utf-8'))
             except:
                 return
-                
+
     def save_as(self):
         # Gets file directory and name of file to save.
         self.file_dir = (tkinter
@@ -132,11 +146,11 @@ class Editor:
             
         # Writes text widget's contents to file.
         file = open(self.file_dir, 'w')
-        file.write(self.textbox.get(1.0, 'end'))
+        file.write(self.tabs[ self.nb.index('current') ].get(1.0, 'end'))
         file.close()
         
         # Update hash
-        self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
+        self.status = md5(self.tabs[ self.nb.index('current') ].get(1.0, 'end').encode('utf-8'))
         
     def save_file(self, *args):
         # If file directory is empty or Untitled, use save_as to get save information from user. 
@@ -146,27 +160,24 @@ class Editor:
         # Otherwise save file to directory, overwriting existing file or creating a new one.
         else:
             with open(self.file_dir, 'w') as file:
-                file.write(self.textbox.get(1.0, 'end'))
+                file.write(self.tabs[ self.nb.index('current') ].get(1.0, 'end'))
                 
             # Update hash
-            self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
+            self.status = md5(self.tabs[ self.nb.index('current') ].get(1.0, 'end').encode('utf-8'))
                 
-    def new_file(self, *args):
-        # Saves file if there are changes, resets directory, and clears text widget.
-        # Prompt user to save file if there were changes, return if they cancel.
-        if not self.save_changes():
-            return
-        
-        self.file_dir = ''
-        self.textbox.delete(1.0, 'end')
-        
-        # Update hash
-        self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
+    def new_file(self, *args):        
+        new_tab = ttk.Frame(self.nb)
+        new_text = self.create_text_window( new_tab )
+        self.nb.add(new_tab, text='Untitled')
+        new_text.config(wrap= 'word' if self.word_wrap.get() else 'none')
+        self.tabs[ self.nb.index( new_tab ) ] = new_text
+        self.nb.select( new_tab )
+        self.wrap( )
         
     def copy(self):
         # Clears the clipboard, copies selected contents.
         try: 
-            sel = self.textbox.get(tk.SEL_FIRST, tk.SEL_LAST)
+            sel = self.tabs[ self.nb.index('current') ].get(tk.SEL_FIRST, tk.SEL_LAST)
             self.master.clipboard_clear()
             self.master.clipboard_append(sel)
         # If no text is selected.
@@ -176,7 +187,7 @@ class Editor:
     def delete(self):
         # Delete the selected text.
         try:
-            self.textbox.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            self.tabs[ self.nb.index('current') ].delete(tk.SEL_FIRST, tk.SEL_LAST)
         # If no text is selected.
         except tk.TclError:
             pass
@@ -184,36 +195,44 @@ class Editor:
     def cut(self):
         # Copies selection to the clipboard, then deletes selection.
         try: 
-            sel = self.textbox.get(tk.SEL_FIRST, tk.SEL_LAST)
+            sel = self.tabs[ self.nb.index('current') ].get(tk.SEL_FIRST, tk.SEL_LAST)
             self.master.clipboard_clear()
             self.master.clipboard_append(sel)
-            self.textbox.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            self.tabs[ self.nb.index('current') ].delete(tk.SEL_FIRST, tk.SEL_LAST)
         # If no text is selected.
         except tk.TclError:
             pass
             
     def wrap(self):
         if self.word_wrap.get() == True:
-            self.textbox.config(wrap="word")
+            for index in self.tabs:
+                self.tabs[ index ].config(wrap="word")
         else:
-            self.textbox.config(wrap="none")
+            for index in self.tabs:
+                self.tabs[ index ].config(wrap="none")
             
     def paste(self):
-        self.textbox.insert(tk.INSERT, self.master.clipboard_get())
+        self.tabs[ self.nb.index('current') ].insert(tk.INSERT, self.master.clipboard_get())
             
     def select_all(self, *args):
         # Selects / highlights all the text.
-        self.textbox.tag_add(tk.SEL, "1.0", tk.END)
+        self.tabs[ self.nb.index('current') ].tag_add(tk.SEL, "1.0", tk.END)
         
         # Set mark position to the end and scroll to the end of selection.
-        self.textbox.mark_set(tk.INSERT, tk.END)
-        self.textbox.see(tk.INSERT)
-        
+        self.tabs[ self.nb.index('current') ].mark_set(tk.INSERT, tk.END)
+        self.tabs[ self.nb.index('current') ].see(tk.INSERT)
+
     def undo(self):
-        self.textbox.edit_undo()
-        
+        self.tabs[ self.nb.index('current') ].edit_undo()
+
     def right_click(self, event):
         self.right_click_menu.post(event.x_root, event.y_root)
+        
+    def close(self, *args):
+        # Make sure there is at least one tab still open.
+        if self.nb.index("end") > 1:
+            # self.tabs.pop( self.nb.index("current") )
+            self.nb.forget( self.nb.index("current") )
         
     def exit(self):        
         # Check if any changes have been made.
@@ -224,7 +243,7 @@ class Editor:
                
     def save_changes(self):
         # Check if any changes have been made, returns False if user chooses to cancel rather than select to save or not.
-        if md5(self.textbox.get(1.0, 'end').encode('utf-8')).digest() != self.status.digest():
+        if md5(self.tabs[ self.nb.index('current') ].get(1.0, 'end').encode('utf-8')).digest() != self.status.digest():
             # If changes were made since last save, ask if user wants to save.
             m = messagebox.askyesnocancel('Editor', 'Do you want to save changes to ' + ('Untitled' if not self.file_dir else self.file_dir) + '?' )
             
