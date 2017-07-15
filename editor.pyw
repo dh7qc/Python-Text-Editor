@@ -27,6 +27,7 @@ class Editor:
         # Create Notebook ( for tabs ).
         self.nb = ttk.Notebook(master)
         self.nb.bind("<Button-2>", self.close_tab)
+        self.nb.bind("<B1-Motion>", self.move_tab)
         self.nb.pack(expand=1, fill="both")
         self.nb.enable_traversal()
         #self.nb.bind('<<NotebookTabChanged>>', self.tab_change)
@@ -78,6 +79,11 @@ class Editor:
         self.right_click_menu.add_command(label="Delete", command=self.delete)
         self.right_click_menu.add_separator()
         self.right_click_menu.add_command(label="Select All", command=self.select_all)
+        
+        # Create tab right-click menu
+        self.tab_right_click_menu = tk.Menu(self.master, tearoff=0)
+        self.tab_right_click_menu.add_command(label="New Tab", command=self.new_file)
+        self.nb.bind('<Button-3>', self.right_click_tab)
 
         # Create Initial Tab
         first_tab = ttk.Frame(self.nb)
@@ -102,6 +108,7 @@ class Editor:
         textbox.bind('<Control-o>', self.open_file)
         textbox.bind('<Control-n>', self.new_file)
         textbox.bind('<Control-a>', self.select_all)
+        textbox.bind('<Control-w>', self.close_tab)
         textbox.bind('<Button-3>', self.right_click)
 
         # Pack the textbox
@@ -249,20 +256,23 @@ class Editor:
     def right_click(self, event):
         self.right_click_menu.post(event.x_root, event.y_root)
         
-    def close_tab(self, event=None):
-        # Close the current tab if close is selected from file menu.
-        if event is None:
-            selected_tab = self.get_tab()
-        # Otherwise close the tab based on coordinates of center-click.
-        else:
-            try: 
-                index = event.widget.index('@%d,%d' % (event.x, event.y))
-                selected_tab = self.nb._nametowidget( self.nb.tabs()[index] )
-            except tk.TclError:
-                return
+    def right_click_tab(self, event):
+        self.tab_right_click_menu.post(event.x_root, event.y_root)
         
+    def close_tab(self, event=None):
         # Make sure there is at least one tab still open.
         if self.nb.index("end") > 1:
+            # Close the current tab if close is selected from file menu, or keyboard shortcut.
+            if event is None or event.type == str( 2 ):
+                selected_tab = self.get_tab()
+            # Otherwise close the tab based on coordinates of center-click.
+            else:
+                try: 
+                    index = event.widget.index('@%d,%d' % (event.x, event.y))
+                    selected_tab = self.nb._nametowidget( self.nb.tabs()[index] )
+                except tk.TclError:
+                    return
+                    
             self.nb.forget( selected_tab )
             self.tabs.pop( selected_tab )
             
@@ -298,6 +308,21 @@ class Editor:
     # Get the object of the current tab.
     def get_tab(self):
         return self.nb._nametowidget( self.nb.select() )
+        
+    def move_tab(self, event):
+        '''
+        Check if there is more than one tab.
+        
+        Use the y-coordinate of the current tab so that if the user moves the mouse up / down 
+        out of the range of the tabs, the left / right movement still moves the tab.
+        '''
+        if self.nb.index("end") > 1:
+            y = self.get_tab().winfo_y() - 5
+            
+            try:
+                self.nb.insert( event.widget.index('@%d,%d' % (event.x, y)), self.nb.select() )
+            except tk.TclError:
+                return
 
 def main(): 
     root = tk.Tk()
