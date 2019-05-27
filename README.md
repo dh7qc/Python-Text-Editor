@@ -1,5 +1,5 @@
 # Text-Editor
-Python Text Editor using Tkinter
+Python Text Editor using Tkinter with tab functionality.
 
 Made using Python 3.4.3 on Windows
 
