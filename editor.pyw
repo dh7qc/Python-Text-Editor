@@ -260,22 +260,25 @@ class Editor:
         self.tab_right_click_menu.post(event.x_root, event.y_root)
         
     def close_tab(self, event=None):
-        # Make sure there is at least one tab still open.
-        if self.nb.index("end") > 1:
-            # Close the current tab if close is selected from file menu, or keyboard shortcut.
-            if event is None or event.type == str( 2 ):
-                selected_tab = self.get_tab()
-            # Otherwise close the tab based on coordinates of center-click.
-            else:
-                try: 
-                    index = event.widget.index('@%d,%d' % (event.x, event.y))
-                    selected_tab = self.nb._nametowidget( self.nb.tabs()[index] )
-                except tk.TclError:
-                    return
-                    
+        # Close the current tab if close is selected from file menu, or keyboard shortcut.
+        if event is None or event.type == str( 2 ):
+            selected_tab = self.get_tab()
+        # Otherwise close the tab based on coordinates of center-click.
+        else:
+            try:
+                index = event.widget.index('@%d,%d' % (event.x, event.y))
+                selected_tab = self.nb._nametowidget( self.nb.tabs()[index] )
+            except tk.TclError:
+                return
+
+        # Prompt to save changes before closing tab
+        if self.save_changes():
             self.nb.forget( selected_tab )
             self.tabs.pop( selected_tab )
-            
+
+        # Exit if last tab is closed
+        if self.nb.index("end") == 0:
+            self.master.destroy()
         
     def exit(self):        
         # Check if any changes have been made.
