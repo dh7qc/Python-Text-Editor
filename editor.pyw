@@ -6,9 +6,9 @@ import os
 from hashlib import md5
 
 class Document:
-    def __init__(self, Frame, TextWidget, FileDir=''):
+    def __init__(self, Frame, TextWidget, FileDir):
         self.file_dir = FileDir
-        self.file_name = 'Untitled' if not FileDir else os.path.basename(FileDir)
+        self.file_name = os.path.basename(FileDir)
         self.textbox = TextWidget
         self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
         
@@ -21,6 +21,7 @@ class Editor:
         
         self.filetypes = (("Normal text file", "*.txt"), ("all files", "*.*"))
         self.init_dir = os.path.join(os.path.expanduser('~'), 'Desktop')
+        self.untitled_count = 1
         
         self.tabs = {} # { index, text widget }
         
@@ -87,7 +88,7 @@ class Editor:
 
         # Create Initial Tab
         first_tab = ttk.Frame(self.nb)
-        self.tabs[ first_tab ] = Document( first_tab, self.create_text_widget(first_tab) )
+        self.tabs[ first_tab ] = Document( first_tab, self.create_text_widget(first_tab), 'Untitled' )
         self.nb.add(first_tab, text='Untitled')
 
     def create_text_widget(self, frame):
@@ -142,7 +143,7 @@ class Editor:
                 self.tabs[ new_tab ].textbox.insert('end', file.read())
                 
                 # Update hash
-                self.tabs[ new_tab ].status = md5(tabs[ new_tab ].textbox.get(1.0, 'end').encode('utf-8'))
+                self.tabs[ new_tab ].status = md5(self.tabs[ new_tab ].textbox.get(1.0, 'end').encode('utf-8'))
             except:
                 return
 
@@ -192,9 +193,9 @@ class Editor:
     def new_file(self, *args):                
         # Create new tab
         new_tab = ttk.Frame(self.nb)
-        self.tabs[ new_tab ] = Document(new_tab, self.create_text_widget(new_tab))
+        self.tabs[ new_tab ] = Document(new_tab, self.create_text_widget(new_tab), self.default_filename())
         self.tabs[ new_tab ].textbox.config(wrap= 'word' if self.word_wrap.get() else 'none')
-        self.nb.add(new_tab, text='Untitled')
+        self.nb.add(new_tab, text=self.tabs[ new_tab ].file_name)
         self.nb.select( new_tab )
         
     def copy(self):
@@ -326,6 +327,10 @@ class Editor:
                 self.nb.insert( event.widget.index('@%d,%d' % (event.x, y)), self.nb.select() )
             except tk.TclError:
                 return
+                
+    def default_filename(self):
+        self.untitled_count += 1
+        return 'Untitled' + str(self.untitled_count-1)
 
 def main(): 
     root = tk.Tk()
