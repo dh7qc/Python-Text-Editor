@@ -31,7 +31,7 @@ class Editor:
         self.nb.bind("<B1-Motion>", self.move_tab)
         self.nb.pack(expand=1, fill="both")
         self.nb.enable_traversal()
-        #self.nb.bind('<<NotebookTabChanged>>', self.tab_change)
+        self.nb.bind('<<NotebookTabChanged>>', self.tab_change)
 
         # Override the X button.
         self.master.protocol('WM_DELETE_WINDOW', self.exit)
@@ -90,7 +90,12 @@ class Editor:
         first_tab = ttk.Frame(self.nb)
         self.tabs[ first_tab ] = Document( first_tab, self.create_text_widget(first_tab), 'Untitled' )
         self.nb.add(first_tab, text='Untitled')
-
+        
+        # Creat 'Add Tab'
+        add_tab = ttk.Frame(self.nb)
+        self.nb.add(add_tab, text=' + ')
+        self.tabs[ add_tab ] = None
+        
     def create_text_widget(self, frame):
         # Horizontal Scroll Bar 
         xscrollbar = tk.Scrollbar(frame, orient='horizontal')
@@ -136,7 +141,7 @@ class Editor:
                 # Create a new tab.
                 new_tab = ttk.Frame(self.nb)
                 self.tabs[ new_tab ] = Document(new_tab, self.create_text_widget(new_tab), file_dir)
-                self.nb.add(new_tab, text=os.path.basename(file_dir))
+                self.nb.insert( self.nb.index('end')-1, new_tab, text=os.path.basename(file_dir))
                 self.nb.select( new_tab )
                             
                 # Puts the contents of the file into the text widget.
@@ -195,7 +200,7 @@ class Editor:
         new_tab = ttk.Frame(self.nb)
         self.tabs[ new_tab ] = Document(new_tab, self.create_text_widget(new_tab), self.default_filename())
         self.tabs[ new_tab ].textbox.config(wrap= 'word' if self.word_wrap.get() else 'none')
-        self.nb.add(new_tab, text=self.tabs[ new_tab ].file_name)
+        self.nb.insert( self.nb.index('end')-1, new_tab, text=self.tabs[new_tab].file_name)
         self.nb.select( new_tab )
         
     def copy(self):
@@ -272,13 +277,19 @@ class Editor:
             except tk.TclError:
                 return
 
+        # Return if attempting to close new tab 'button' tab, otherwise ensure 'add' tab isn't selected
+        if self.tabs[ selected_tab ] is None:
+            return
+        elif self.nb.index('end') > 2 and self.nb.index('current') == self.nb.index('end') - 2 and self.nb.index('current') == self.nb.index(selected_tab):
+            self.nb.select(self.nb.index('current')-1)
+
         # Prompt to save changes before closing tab
         if self.save_changes():
             self.nb.forget( selected_tab )
             self.tabs.pop( selected_tab )
 
         # Exit if last tab is closed
-        if self.nb.index("end") == 0:
+        if self.nb.index("end") <= 1:
             self.master.destroy()
         
     def exit(self):        
@@ -324,13 +335,18 @@ class Editor:
             y = self.get_tab().winfo_y() - 5
             
             try:
-                self.nb.insert( event.widget.index('@%d,%d' % (event.x, y)), self.nb.select() )
+                self.nb.insert( min( event.widget.index('@%d,%d' % (event.x, y)), self.nb.index('end'))-1, self.nb.select() )
             except tk.TclError:
                 return
                 
     def default_filename(self):
         self.untitled_count += 1
         return 'Untitled' + str(self.untitled_count-1)
+
+    def tab_change(self, event):
+        if self.tabs[ self.get_tab() ] is None:
+            self.new_file()
+
 
 def main(): 
     root = tk.Tk()
