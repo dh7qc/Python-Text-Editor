@@ -6,7 +6,7 @@ import os
 from hashlib import md5
 
 class Document:
-    def __init__(self, Frame, TextWidget, FileDir):
+    def __init__(self, TextWidget, FileDir):
         self.file_dir = FileDir
         self.file_name = os.path.basename(FileDir)
         self.textbox = TextWidget
@@ -88,7 +88,7 @@ class Editor:
 
         # Create Initial Tab
         first_tab = ttk.Frame(self.nb)
-        self.tabs[ first_tab ] = Document( first_tab, self.create_text_widget(first_tab), 'Untitled' )
+        self.tabs[ first_tab ] = Document( self.create_text_widget(first_tab), 'Untitled' )
         self.nb.add(first_tab, text='Untitled')
         
         # Creat 'Add Tab'
@@ -140,7 +140,7 @@ class Editor:
                 
                 # Create a new tab.
                 new_tab = ttk.Frame(self.nb)
-                self.tabs[ new_tab ] = Document(new_tab, self.create_text_widget(new_tab), file_dir)
+                self.tabs[ new_tab ] = Document(self.create_text_widget(new_tab), file_dir)
                 self.nb.insert( self.nb.index('end')-1, new_tab, text=os.path.basename(file_dir))
                 self.nb.select( new_tab )
                             
@@ -198,7 +198,7 @@ class Editor:
     def new_file(self, *args):                
         # Create new tab
         new_tab = ttk.Frame(self.nb)
-        self.tabs[ new_tab ] = Document(new_tab, self.create_text_widget(new_tab), self.default_filename())
+        self.tabs[ new_tab ] = Document(self.create_text_widget(new_tab), self.default_filename())
         self.tabs[ new_tab ].textbox.config(wrap= 'word' if self.word_wrap.get() else 'none')
         self.nb.insert( self.nb.index('end')-1, new_tab, text=self.tabs[new_tab].file_name)
         self.nb.select( new_tab )
@@ -274,17 +274,19 @@ class Editor:
             try:
                 index = event.widget.index('@%d,%d' % (event.x, event.y))
                 selected_tab = self.nb._nametowidget( self.nb.tabs()[index] )
+                
+                # Return if attempting to close '+' tab.
+                if self.tabs[ selected_tab ] is None:
+                    return
             except tk.TclError:
                 return
 
-        # Return if attempting to close new tab 'button' tab, otherwise ensure 'add' tab isn't selected
-        if self.tabs[ selected_tab ] is None:
-            return
-        elif self.nb.index('end') > 2 and self.nb.index('current') == self.nb.index('end') - 2 and self.nb.index('current') == self.nb.index(selected_tab):
-            self.nb.select(self.nb.index('current')-1)
-
         # Prompt to save changes before closing tab
-        if self.save_changes():
+        if self.save_changes(selected_tab):
+            # if the tab next to '+' is selected, select the previous tab to prevent
+            # automatically switching to '+' tab when current tab is closed
+            if self.nb.index('current') > 0 and self.nb.select() == self.nb.tabs()[-2]:
+                self.nb.select(self.nb.index('current')-1)
             self.nb.forget( selected_tab )
             self.tabs.pop( selected_tab )
 
@@ -294,19 +296,21 @@ class Editor:
         
     def exit(self):        
         # Check if any changes have been made.
-        if self.save_changes():
+        # TODO: Check all tabs for changes, not just current one
+        if self.save_changes(self.get_tab()):
             self.master.destroy()
         else:
             return
                
-    def save_changes(self):
-        curr_tab = self.get_tab()
-        file_dir = self.tabs[ curr_tab ].file_dir
-        
+    def save_changes(self, tab):        
         # Check if any changes have been made, returns False if user chooses to cancel rather than select to save or not.
-        if md5(self.tabs[ curr_tab ].textbox.get(1.0, 'end').encode('utf-8')).digest() != self.tabs[ curr_tab ].status.digest():
+        if md5(self.tabs[ tab ].textbox.get(1.0, 'end').encode('utf-8')).digest() != self.tabs[ tab ].status.digest():
+            # Select the tab being closed is not the current tab, select it.
+            if self.get_tab() != tab:
+                self.nb.select(tab)
+        
             # If changes were made since last save, ask if user wants to save.
-            m = messagebox.askyesnocancel('Editor', 'Do you want to save changes to ' + ('Untitled' if not file_dir else file_dir) + '?' )
+            m = messagebox.askyesnocancel('Editor', 'Do you want to save changes to ' + self.tabs[ tab ].file_dir + '?' )
             
             # If None, cancel.
             if m is None:
@@ -344,7 +348,8 @@ class Editor:
         return 'Untitled' + str(self.untitled_count-1)
 
     def tab_change(self, event):
-        if self.tabs[ self.get_tab() ] is None:
+        # If last tab was selected, create new tab
+        if self.nb.select() == self.nb.tabs()[-1]:
             self.new_file()
 
 
