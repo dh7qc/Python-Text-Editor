@@ -5,13 +5,66 @@ from tkinter import messagebox
 import os
 from hashlib import md5
 
-class Document:
-    def __init__(self, TextWidget, FileDir):
+class Notebook(ttk.Notebook):
+    def __init__(self, *args):
+        ttk.Notebook.__init__(self, *args)
+        self.enable_traversal()
+        self.pack(expand=1, fill="both")
+        self.bind("<B1-Motion>", self.move_tab)
+
+    # Get the object of the current tab.
+    def current_tab(self):
+        return self.nametowidget( self.select() )
+
+    def indexed_tab(self, index):
+        return self.nametowidget( self.tabs()[index] )
+
+    # Move tab position by dragging tab
+    def move_tab(self, event):
+        '''
+        Check if there is more than one tab.
+
+        Use the y-coordinate of the current tab so that if the user moves the mouse up / down
+        out of the range of the tabs, the left / right movement still moves the tab.
+        '''
+        if self.index("end") > 1:
+            y = self.current_tab().winfo_y() - 5
+
+            try:
+                self.insert( min( event.widget.index('@%d,%d' % (event.x, y)), self.index('end')-2), self.select() )
+            except tk.TclError:
+                pass
+
+class Tab(ttk.Frame):
+    def __init__(self, *args, FileDir):
+        ttk.Frame.__init__(self, *args)
+        self.textbox = self.create_text_widget()
         self.file_dir = FileDir
         self.file_name = os.path.basename(FileDir)
-        self.textbox = TextWidget
         self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
         
+    def create_text_widget(self):
+        # Horizontal Scroll Bar
+        xscrollbar = tk.Scrollbar(self, orient='horizontal')
+        xscrollbar.pack(side='bottom', fill='x')
+
+        # Vertical Scroll Bar
+        yscrollbar = tk.Scrollbar(self)
+        yscrollbar.pack(side='right', fill='y')
+
+        # Create Text Editor Box
+        textbox = tk.Text(self, relief='sunken', borderwidth=0, wrap='none')
+        textbox.config(xscrollcommand=xscrollbar.set, yscrollcommand=yscrollbar.set, undo=True, autoseparators=True)
+
+        # Pack the textbox
+        textbox.pack(fill='both', expand=True)
+
+        # Configure Scrollbars
+        xscrollbar.config(command=textbox.xview)
+        yscrollbar.config(command=textbox.yview)
+
+        return textbox
+
 class Editor:
     def __init__(self, master):
         self.master = master
@@ -23,15 +76,11 @@ class Editor:
         self.init_dir = os.path.join(os.path.expanduser('~'), 'Desktop')
         self.untitled_count = 1
         
-        self.tabs = {} # { index, text widget }
-        
         # Create Notebook ( for tabs ).
-        self.nb = ttk.Notebook(master)
+        self.nb = Notebook(master)
         self.nb.bind("<Button-2>", self.close_tab)
-        self.nb.bind("<B1-Motion>", self.move_tab)
-        self.nb.pack(expand=1, fill="both")
-        self.nb.enable_traversal()
         self.nb.bind('<<NotebookTabChanged>>', self.tab_change)
+        self.nb.bind('<Button-3>', self.right_click_tab)
 
         # Override the X button.
         self.master.protocol('WM_DELETE_WINDOW', self.exit)
@@ -82,49 +131,20 @@ class Editor:
         self.right_click_menu.add_command(label="Select All", command=self.select_all)
         
         # Create tab right-click menu
-        self.tab_right_click_menu = tk.Menu(self.master, tearoff=0)
+        self.tab_right_click_menu = tk.Menu(self.nb, tearoff=0)
         self.tab_right_click_menu.add_command(label="New Tab", command=self.new_file)
-        self.nb.bind('<Button-3>', self.right_click_tab)
-
-        # Create Initial Tab
-        first_tab = ttk.Frame(self.nb)
-        self.tabs[ first_tab ] = Document( self.create_text_widget(first_tab), 'Untitled' )
-        self.nb.add(first_tab, text='Untitled')
-        
-        # Creat 'Add Tab'
-        add_tab = ttk.Frame(self.nb)
-        self.nb.add(add_tab, text=' + ')
-        self.tabs[ add_tab ] = None
-        
-    def create_text_widget(self, frame):
-        # Horizontal Scroll Bar 
-        xscrollbar = tk.Scrollbar(frame, orient='horizontal')
-        xscrollbar.pack(side='bottom', fill='x')
-        
-        # Vertical Scroll Bar
-        yscrollbar = tk.Scrollbar(frame)
-        yscrollbar.pack(side='right', fill='y')
-
-        # Create Text Editor Box
-        textbox = tk.Text(frame, relief='sunken', borderwidth=0, wrap='none')
-        textbox.config(xscrollcommand=xscrollbar.set, yscrollcommand=yscrollbar.set, undo=True, autoseparators=True)
 
         # Keyboard / Click Bindings
-        textbox.bind('<Control-s>', self.save_file)
-        textbox.bind('<Control-o>', self.open_file)
-        textbox.bind('<Control-n>', self.new_file)
-        textbox.bind('<Control-a>', self.select_all)
-        textbox.bind('<Control-w>', self.close_tab)
-        textbox.bind('<Button-3>', self.right_click)
-
-        # Pack the textbox
-        textbox.pack(fill='both', expand=True)        
+        self.master.bind_class('Text', '<Control-s>', self.save_file)
+        self.master.bind_class('Text', '<Control-o>', self.open_file)
+        self.master.bind_class('Text', '<Control-n>', self.new_file)
+        self.master.bind_class('Text', '<Control-a>', self.select_all)
+        self.master.bind_class('Text', '<Control-w>', self.close_tab)
+        self.master.bind_class('Text', '<Button-3>', self.right_click)
         
-        # Configure Scrollbars
-        xscrollbar.config(command=textbox.xview)
-        yscrollbar.config(command=textbox.yview)
-        
-        return textbox
+        # Create initial tab and 'Add' tab
+        self.nb.add(Tab(FileDir='Untitled'), text='Untitled')
+        self.nb.add(Tab(FileDir='f'), text=' + ')
 
     def open_file(self, *args):        
         # Open a window to browse to the file you would like to open, returns the directory.
@@ -138,22 +158,21 @@ class Editor:
                 # Open the file.
                 file = open(file_dir)
                 
-                # Create a new tab.
-                new_tab = ttk.Frame(self.nb)
-                self.tabs[ new_tab ] = Document(self.create_text_widget(new_tab), file_dir)
+                # Create a new tab and insert at end.
+                new_tab = Tab(FileDir=file_dir)
                 self.nb.insert( self.nb.index('end')-1, new_tab, text=os.path.basename(file_dir))
                 self.nb.select( new_tab )
                             
                 # Puts the contents of the file into the text widget.
-                self.tabs[ new_tab ].textbox.insert('end', file.read())
+                self.nb.current_tab().textbox.insert('end', file.read())
                 
                 # Update hash
-                self.tabs[ new_tab ].status = md5(self.tabs[ new_tab ].textbox.get(1.0, 'end').encode('utf-8'))
+                self.nb.current_tab().status = md5(self.nb.current_tab().textbox.get(1.0, 'end').encode('utf-8'))
             except:
                 return
 
     def save_as(self):
-        curr_tab = self.get_tab()
+        curr_tab = self.nb.current_tab()
     
         # Gets file directory and name of file to save.
         file_dir = (tkinter
@@ -168,45 +187,44 @@ class Editor:
         if file_dir[-4:] != '.txt':
             file_dir += '.txt'
             
-        self.tabs[ curr_tab ].file_dir = file_dir
-        self.tabs[ curr_tab ].file_name = os.path.basename(file_dir)
-        self.nb.tab( curr_tab, text=self.tabs[ curr_tab ].file_name) 
+        curr_tab.file_dir = file_dir
+        curr_tab.file_name = os.path.basename(file_dir)
+        self.nb.tab( curr_tab, text=curr_tab.file_name)
             
         # Writes text widget's contents to file.
         file = open(file_dir, 'w')
-        file.write(self.tabs[ curr_tab ].textbox.get(1.0, 'end'))
+        file.write(curr_tab.textbox.get(1.0, 'end'))
         file.close()
         
         # Update hash
-        self.tabs[ curr_tab ].status = md5(self.tabs[ curr_tab ].textbox.get(1.0, 'end').encode('utf-8'))
+        curr_tab.status = md5(curr_tab.textbox.get(1.0, 'end').encode('utf-8'))
         
     def save_file(self, *args):
-        curr_tab = self.get_tab()
+        curr_tab = self.nb.current_tab()
         
         # If file directory is empty or Untitled, use save_as to get save information from user. 
-        if not self.tabs[ curr_tab ].file_dir:
+        if not curr_tab.file_dir:
             self.save_as()
 
         # Otherwise save file to directory, overwriting existing file or creating a new one.
         else:
-            with open(self.tabs[ curr_tab ].file_dir, 'w') as file:
-                file.write(self.tabs[ curr_tab ].textbox.get(1.0, 'end'))
+            with open(curr_tab.file_dir, 'w') as file:
+                file.write(curr_tab.textbox.get(1.0, 'end'))
                 
             # Update hash
-            self.tabs[ curr_tab ].status = md5(self.tabs[ curr_tab ].textbox.get(1.0, 'end').encode('utf-8'))
+            curr_tab.status = md5(curr_tab.textbox.get(1.0, 'end').encode('utf-8'))
                 
     def new_file(self, *args):                
         # Create new tab
-        new_tab = ttk.Frame(self.nb)
-        self.tabs[ new_tab ] = Document(self.create_text_widget(new_tab), self.default_filename())
-        self.tabs[ new_tab ].textbox.config(wrap= 'word' if self.word_wrap.get() else 'none')
-        self.nb.insert( self.nb.index('end')-1, new_tab, text=self.tabs[new_tab].file_name)
+        new_tab = Tab(FileDir=self.default_filename())
+        new_tab.textbox.config(wrap= 'word' if self.word_wrap.get() else 'none')
+        self.nb.insert( self.nb.index('end')-1, new_tab, text=new_tab.file_name)
         self.nb.select( new_tab )
         
     def copy(self):
         # Clears the clipboard, copies selected contents.
         try: 
-            sel = self.tabs[ self.get_tab() ].textbox.get(tk.SEL_FIRST, tk.SEL_LAST)
+            sel = self.nb.current_tab().textbox.get(tk.SEL_FIRST, tk.SEL_LAST)
             self.master.clipboard_clear()
             self.master.clipboard_append(sel)
         # If no text is selected.
@@ -216,7 +234,7 @@ class Editor:
     def delete(self):
         # Delete the selected text.
         try:
-            self.tabs[ self.get_tab() ].textbox.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            self.nb.current_tab().textbox.delete(tk.SEL_FIRST, tk.SEL_LAST)
         # If no text is selected.
         except tk.TclError:
             pass
@@ -224,40 +242,40 @@ class Editor:
     def cut(self):
         # Copies selection to the clipboard, then deletes selection.
         try: 
-            sel = self.tabs[ self.get_tab() ].textbox.get(tk.SEL_FIRST, tk.SEL_LAST)
+            sel = self.nb.current_tab().textbox.get(tk.SEL_FIRST, tk.SEL_LAST)
             self.master.clipboard_clear()
             self.master.clipboard_append(sel)
-            self.tabs[ self.get_tab() ].textbox.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            self.nb.current_tab().textbox.delete(tk.SEL_FIRST, tk.SEL_LAST)
         # If no text is selected.
         except tk.TclError:
             pass
             
     def wrap(self):
         if self.word_wrap.get() == True:
-            for index in self.tabs:
-                self.tabs[ index ].textbox.config(wrap="word")
+            for i in range(self.nb.index('end')-1):
+                self.nb.indexed_tab(i).textbox.config(wrap="word")
         else:
-            for index in self.tabs:
-                self.tabs[ index ].textbox.config(wrap="none")
+            for i in range(self.nb.index('end')-1):
+                self.nb.indexed_tab(i).textbox.config(wrap="none")
             
     def paste(self):
         try: 
-            self.tabs[ self.get_tab() ].textbox.insert(tk.INSERT, self.master.clipboard_get())
+            self.nb.current_tab().textbox.insert(tk.INSERT, self.master.clipboard_get())
         except tk.TclError:
             pass
             
     def select_all(self, *args):
-        curr_tab = self.get_tab()
+        curr_tab = self.nb.current_tab()
         
         # Selects / highlights all the text.
-        self.tabs[ curr_tab ].textbox.tag_add(tk.SEL, "1.0", tk.END)
+        curr_tab.textbox.tag_add(tk.SEL, "1.0", tk.END)
         
         # Set mark position to the end and scroll to the end of selection.
-        self.tabs[ curr_tab ].textbox.mark_set(tk.INSERT, tk.END)
-        self.tabs[ curr_tab ].textbox.see(tk.INSERT)
+        curr_tab.textbox.mark_set(tk.INSERT, tk.END)
+        curr_tab.textbox.see(tk.INSERT)
 
     def undo(self):
-        self.tabs[ self.get_tab() ].textbox.edit_undo()
+        self.nb.current_tab().textbox.edit_undo()
 
     def right_click(self, event):
         self.right_click_menu.post(event.x_root, event.y_root)
@@ -268,16 +286,16 @@ class Editor:
     def close_tab(self, event=None):
         # Close the current tab if close is selected from file menu, or keyboard shortcut.
         if event is None or event.type == str( 2 ):
-            selected_tab = self.get_tab()
+            selected_tab = self.nb.current_tab()
         # Otherwise close the tab based on coordinates of center-click.
         else:
             try:
                 index = event.widget.index('@%d,%d' % (event.x, event.y))
-                selected_tab = self.nb._nametowidget( self.nb.tabs()[index] )
+                selected_tab = self.nb.indexed_tab( index )
                 
-                # Return if attempting to close '+' tab.
-                if self.tabs[ selected_tab ] is None:
+                if index == self.nb.index('end')-1:
                     return
+
             except tk.TclError:
                 return
 
@@ -288,7 +306,6 @@ class Editor:
             if self.nb.index('current') > 0 and self.nb.select() == self.nb.tabs()[-2]:
                 self.nb.select(self.nb.index('current')-1)
             self.nb.forget( selected_tab )
-            self.tabs.pop( selected_tab )
 
         # Exit if last tab is closed
         if self.nb.index("end") <= 1:
@@ -297,20 +314,20 @@ class Editor:
     def exit(self):        
         # Check if any changes have been made.
         # TODO: Check all tabs for changes, not just current one
-        if self.save_changes(self.get_tab()):
+        if self.save_changes(self.nb.current_tab()):
             self.master.destroy()
         else:
             return
                
-    def save_changes(self, tab):        
+    def save_changes(self, tab):
         # Check if any changes have been made, returns False if user chooses to cancel rather than select to save or not.
-        if md5(self.tabs[ tab ].textbox.get(1.0, 'end').encode('utf-8')).digest() != self.tabs[ tab ].status.digest():
+        if md5(tab.textbox.get(1.0, 'end').encode('utf-8')).digest() != tab.status.digest():
             # Select the tab being closed is not the current tab, select it.
-            if self.get_tab() != tab:
+            if self.nb.current_tab() != tab:
                 self.nb.select(tab)
         
             # If changes were made since last save, ask if user wants to save.
-            m = messagebox.askyesnocancel('Editor', 'Do you want to save changes to ' + self.tabs[ tab ].file_dir + '?' )
+            m = messagebox.askyesnocancel('Editor', 'Do you want to save changes to ' + tab.file_dir + '?' )
             
             # If None, cancel.
             if m is None:
@@ -323,26 +340,7 @@ class Editor:
                 pass
                 
         return True
-    
-    # Get the object of the current tab.
-    def get_tab(self):
-        return self.nb._nametowidget( self.nb.select() )
-        
-    def move_tab(self, event):
-        '''
-        Check if there is more than one tab.
-        
-        Use the y-coordinate of the current tab so that if the user moves the mouse up / down 
-        out of the range of the tabs, the left / right movement still moves the tab.
-        '''
-        if self.nb.index("end") > 1:
-            y = self.get_tab().winfo_y() - 5
-            
-            try:
-                self.nb.insert( min( event.widget.index('@%d,%d' % (event.x, y)), self.nb.index('end'))-1, self.nb.select() )
-            except tk.TclError:
-                return
-                
+
     def default_filename(self):
         self.untitled_count += 1
         return 'Untitled' + str(self.untitled_count-1)
