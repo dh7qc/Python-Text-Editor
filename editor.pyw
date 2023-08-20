@@ -39,7 +39,7 @@ class Tab(ttk.Frame):
     def __init__(self, *args, FileDir):
         ttk.Frame.__init__(self, *args)
         self.textbox = self.create_text_widget()
-        self.file_dir = FileDir
+        self.file_dir = None
         self.file_name = os.path.basename(FileDir)
         self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
         
@@ -181,7 +181,7 @@ class Editor:
         
         # Return if directory is still empty (user closes window without specifying file name).
         if not file_dir:
-            return
+            return False
          
         # Adds .txt suffix if not already included.
         if file_dir[-4:] != '.txt':
@@ -199,12 +199,14 @@ class Editor:
         # Update hash
         curr_tab.status = md5(curr_tab.textbox.get(1.0, 'end').encode('utf-8'))
         
+        return True
+        
     def save_file(self, *args):
         curr_tab = self.nb.current_tab()
         
         # If file directory is empty or Untitled, use save_as to get save information from user. 
         if not curr_tab.file_dir:
-            self.save_as()
+            return self.save_as()
 
         # Otherwise save file to directory, overwriting existing file or creating a new one.
         else:
@@ -213,6 +215,8 @@ class Editor:
                 
             # Update hash
             curr_tab.status = md5(curr_tab.textbox.get(1.0, 'end').encode('utf-8'))
+            
+            return True
                 
     def new_file(self, *args):                
         # Create new tab
@@ -294,10 +298,10 @@ class Editor:
                 selected_tab = self.nb.indexed_tab( index )
                 
                 if index == self.nb.index('end')-1:
-                    return
+                    return False
 
             except tk.TclError:
-                return
+                return False
 
         # Prompt to save changes before closing tab
         if self.save_changes(selected_tab):
@@ -306,18 +310,20 @@ class Editor:
             if self.nb.index('current') > 0 and self.nb.select() == self.nb.tabs()[-2]:
                 self.nb.select(self.nb.index('current')-1)
             self.nb.forget( selected_tab )
+        else:
+            return False
 
         # Exit if last tab is closed
         if self.nb.index("end") <= 1:
             self.master.destroy()
+            
+        return True
         
     def exit(self):        
         # Check if any changes have been made.
-        # TODO: Check all tabs for changes, not just current one
-        if self.save_changes(self.nb.current_tab()):
-            self.master.destroy()
-        else:
-            return
+        for i in range(self.nb.index('end')-1):
+            if self.close_tab() is False:
+                break
                
     def save_changes(self, tab):
         # Check if any changes have been made, returns False if user chooses to cancel rather than select to save or not.
@@ -326,15 +332,14 @@ class Editor:
             if self.nb.current_tab() != tab:
                 self.nb.select(tab)
         
-            # If changes were made since last save, ask if user wants to save.
-            m = messagebox.askyesnocancel('Editor', 'Do you want to save changes to ' + tab.file_dir + '?' )
+            m = messagebox.askyesnocancel('Editor', 'Do you want to save changes to ' + tab.file_name + '?' )
             
             # If None, cancel.
             if m is None:
                 return False
             # else if True, save.
             elif m is True:
-                self.save_file()
+                return self.save_file()
             # else don't save.
             else:
                 pass
